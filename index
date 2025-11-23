@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Obsidian Gateway | Login</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
+    
+</head>
+<body class="crt flex items-center justify-center h-screen overflow-hidden">
+    <div class="scanline"></div>
+    <div class="border-box w-full max-w-md relative z-10">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold glow-text mb-2">OBSIDIAN</h1>
+            <p class="text-xs text-amber-700 tracking-widest">SECURE TERMINAL ACCESS</p>
+        </div>
+        <form id="loginForm" class="space-y-6">
+            <div>
+                <label class="block text-xs uppercase tracking-widest mb-1 opacity-70">Identity</label>
+                <input type="text" id="username" class="w-full bg-black border border-amber-900 p-2 text-amber-500 focus:outline-none focus:border-amber-500" autocomplete="off">
+            </div>
+            <div>
+                <label class="block text-xs uppercase tracking-widest mb-1 opacity-70">Keycode</label>
+                <input type="password" id="password" class="w-full bg-black border border-amber-900 p-2 text-amber-500 focus:outline-none focus:border-amber-500">
+            </div>
+            <button type="submit" class="w-full bg-amber-900/20 border border-amber-600 text-amber-500 py-2 hover:bg-amber-600 hover:text-black transition-colors font-bold">
+                AUTHENTICATE
+            </button>
+        </form>
+        <div id="errorMsg" class="mt-4 text-center text-red-500 text-sm hidden">ACCESS DENIED</div>
+    </div>
+    <script>
+        // 2. MODIFIED: Switched to the simpler 'sha256' function from the loaded library
+        function hash(string) {
+            // This function is now provided by the script tag in the <head>
+            return sha256(string);
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            
+            const btn = e.target.querySelector('button');
+            const originalText = btn.innerText;
+            
+            btn.innerText = "VERIFYING...";
+            btn.disabled = true;
+
+            try {
+                // The hash function now works on insecure HTTP connections
+                const userHash = hash(p); // Awaiting is no longer strictly necessary for this synchronous hash
+
+                const targetHash = "d322258b15bf9dc1f232f5df9fd279b38292477a175c74261e34344dda852db3"; 
+
+                if(u === 'admin' && userHash === targetHash) {
+                    sessionStorage.setItem('auth_token', 'valid');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    throw 'Invalid Credentials';
+                }
+            } catch(err) {
+                setTimeout(() => {
+                    const msg = document.getElementById('errorMsg');
+                    msg.classList.remove('hidden');
+                    btn.innerText = originalText;
+                    btn.disabled = false;
+                    
+                    msg.parentElement.animate([
+                        { transform: 'translateX(0)' }, { transform: 'translateX(-5px)' }, 
+                        { transform: 'translateX(5px)' }, { transform: 'translateX(0)' }
+                    ], { duration: 200 });
+                }, 500);
+            }
+        });
+    </script>
+</body>
+</html>
